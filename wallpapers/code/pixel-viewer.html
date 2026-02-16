@@ -1,0 +1,1301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LED Pixel Viewer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #0a0a0a;
+    color: #eee;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 260px;
+    background: #111;
+    border-right: 1px solid #222;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .sidebar-header {
+    padding: 16px;
+    border-bottom: 1px solid #222;
+    font-size: 14px;
+    font-weight: 600;
+    color: #aaa;
+  }
+  .categories {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #222;
+  }
+  .cat-btn {
+    background: #1a1a1a;
+    color: #666;
+    border: 1px solid #2a2a2a;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.15s;
+  }
+  .cat-btn:hover { background: #222; color: #aaa; }
+  .cat-btn.active { background: #1a2a3a; color: #6af; border-color: #2a3a5a; }
+  .anim-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+  .anim-list::-webkit-scrollbar { width: 6px; }
+  .anim-list::-webkit-scrollbar-track { background: transparent; }
+  .anim-list::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+  .anim-item {
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 2px;
+  }
+  .anim-item:hover { background: #1a1a1a; }
+  .anim-item.active { background: #1a2a3a; border: 1px solid #2a3a5a; }
+  .anim-item .name { font-size: 13px; font-weight: 500; color: #ccc; }
+  .anim-item .desc { font-size: 10px; color: #555; margin-top: 2px; line-height: 1.3; }
+  .anim-item.active .name { color: #6af; }
+
+  /* Main */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    gap: 24px;
+    overflow-y: auto;
+  }
+  .title-bar {
+    text-align: center;
+  }
+  .title-bar h1 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #ddd;
+  }
+  .title-bar p {
+    font-size: 12px;
+    color: #555;
+    margin-top: 4px;
+  }
+
+  /* Canvas display */
+  .display {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+  }
+  .canvas-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .canvas-wrap label {
+    font-size: 10px;
+    color: #444;
+  }
+  canvas {
+    border-radius: 8px;
+    image-rendering: pixelated;
+  }
+  #mainCanvas {
+    border-radius: 12px;
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .ctrl-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #666;
+  }
+  .ctrl-group label {
+    min-width: 50px;
+    color: #888;
+    font-size: 11px;
+  }
+  .ctrl-group input[type="range"] {
+    width: 80px;
+    accent-color: #5B8FB9;
+  }
+  .ctrl-group input[type="color"] {
+    width: 28px;
+    height: 28px;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 0;
+    cursor: pointer;
+    background: none;
+  }
+  .ctrl-group input[type="color"]::-webkit-color-swatch-wrapper { padding: 3px; }
+  .ctrl-group input[type="color"]::-webkit-color-swatch { border-radius: 3px; border: none; }
+  .val { min-width: 32px; text-align: right; color: #555; font-size: 11px; }
+
+  .action-btn {
+    background: #1a2a3a;
+    color: #6af;
+    border: 1px solid #2a3a5a;
+    padding: 8px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+  .action-btn:hover { background: #253a5a; }
+  .action-btn.playing { background: #3a1a1a; color: #f66; border-color: #5a2a2a; }
+  .action-btn.copy { background: #1a3a1a; color: #6c6; border-color: #2a5a2a; }
+  .action-btn.copy:hover { background: #254a25; }
+  .action-btn.copied { background: #3a5a3a; color: #fff; }
+  .btn-row { display: flex; gap: 10px; align-items: center; }
+  .grid-size-ctrl {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: #151515;
+    border-radius: 8px;
+    border: 1px solid #222;
+  }
+  .grid-size-ctrl label { font-size: 12px; color: #888; white-space: nowrap; }
+  .grid-size-ctrl input[type="range"] { width: 120px; accent-color: #E8863A; }
+  .grid-size-ctrl .val { font-size: 13px; color: #E8863A; font-weight: 600; min-width: 36px; text-align: center; }
+  .code-output {
+    display: none;
+    width: 100%;
+    max-width: 600px;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 12px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 11px;
+    color: #aaa;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 200px;
+    overflow-y: auto;
+    line-height: 1.5;
+  }
+  .code-output::-webkit-scrollbar { width: 6px; }
+  .code-output::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+  .sizes-row {
+    display: flex;
+    gap: 16px;
+    align-items: flex-end;
+  }
+  .size-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .size-item label {
+    font-size: 9px;
+    color: #444;
+  }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="sidebar-header">LED Pixel Animations</div>
+  <div class="categories" id="categories"></div>
+  <div class="anim-list" id="animList"></div>
+</div>
+
+<div class="main">
+  <div class="title-bar">
+    <h1 id="animTitle">Select an animation</h1>
+    <p id="animDesc">Pick one from the sidebar to preview</p>
+  </div>
+
+  <canvas id="mainCanvas" width="560" height="560" style="width:280px;height:280px;background:#0a0a0a"></canvas>
+
+  <div class="sizes-row" id="sizesRow"></div>
+
+  <div id="controlsWrap">
+    <div class="controls" id="controls"></div>
+  </div>
+
+  <div class="grid-size-ctrl">
+    <label>Grid:</label>
+    <input type="range" id="gridSlider" min="4" max="100" value="7" oninput="setGridSize(+this.value)">
+    <span class="val" id="gridVal">7x7</span>
+  </div>
+
+  <div class="btn-row">
+    <button class="action-btn" id="playBtn" onclick="togglePlay()">&#9654; Play</button>
+    <button class="action-btn copy" id="copyBtn" onclick="copyCode()">Copy Code</button>
+  </div>
+
+  <div class="code-output" id="codeOutput"></div>
+</div>
+
+<script>
+const DPR = window.devicePixelRatio || 1;
+let GRID = 7;
+let CENTER = (GRID - 1) / 2;
+
+// ── Color constants ──
+const COL_O = { r: 232, g: 134, b: 58 };
+const COL_B = { r: 91, g: 143, b: 185 };
+const COL_W = { r: 230, g: 225, b: 210 };
+
+// ── Helpers ──
+function lerp(a, b, t) { return a + (b - a) * t; }
+function clamp(v, lo = 0, hi = 1) { return Math.max(lo, Math.min(hi, v)); }
+function sigmoid(x, k = 8) { return 1 / (1 + Math.exp(-k * (x - 0.5))); }
+
+function noise2d(x, y, seed = 0) {
+  const n = Math.sin(x * 127.1 + y * 311.7 + seed * 113.3) * 43758.5453;
+  return n - Math.floor(n);
+}
+function smoothNoise(x, y, seed) {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  const fx = x - ix, fy = y - iy;
+  const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  const n00 = noise2d(ix, iy, seed), n10 = noise2d(ix + 1, iy, seed);
+  const n01 = noise2d(ix, iy + 1, seed), n11 = noise2d(ix + 1, iy + 1, seed);
+  return lerp(lerp(n00, n10, sx), lerp(n01, n11, sx), sy);
+}
+function fbm(x, y, seed, oct = 3) {
+  let v = 0, amp = 0.5, freq = 1;
+  for (let i = 0; i < oct; i++) { v += amp * smoothNoise(x * freq, y * freq, seed + i * 17); amp *= 0.5; freq *= 2; }
+  return v;
+}
+
+function hexToRgb(hex) {
+  return { r: parseInt(hex.slice(1, 3), 16), g: parseInt(hex.slice(3, 5), 16), b: parseInt(hex.slice(5, 7), 16) };
+}
+
+function col(color, brightness) { return { ...color, brightness }; }
+
+function blendColor(mix) {
+  return { r: Math.round(COL_O.r * (1 - mix) + COL_B.r * mix), g: Math.round(COL_O.g * (1 - mix) + COL_B.g * mix), b: Math.round(COL_O.b * (1 - mix) + COL_B.b * mix) };
+}
+
+function setCell(cells, x, y, br, c) {
+  if (x < 0 || x >= GRID || y < 0 || y >= GRID || br < 0.03) return;
+  const key = x + "," + y;
+  const ex = cells.get(key);
+  if (!ex || ex.brightness < br) cells.set(key, { brightness: br, r: c.r, g: c.g, b: c.b });
+}
+
+// ── LED Renderer ──
+function drawLED(ctx, canvasSize, cells) {
+  const s = canvasSize;
+  ctx.clearRect(0, 0, s, s);
+  const gapRatio = GRID <= 20 ? 0.18 : GRID <= 40 ? 0.08 : 0.03;
+  const cellSize = s / (GRID + (GRID - 1) * gapRatio);
+  const gap = cellSize * gapRatio;
+  const total = GRID * cellSize + (GRID - 1) * gap;
+  const off = (s - total) / 2;
+  const rad = cellSize * 0.28;
+  const doGlow = GRID <= 20;
+
+  // Glow pass (skip for large grids)
+  if (doGlow) {
+    for (let gy = 0; gy < GRID; gy++) {
+      for (let gx = 0; gx < GRID; gx++) {
+        const st = cells.get(gx + "," + gy);
+        if (!st || st.brightness < 0.05) continue;
+        const px = off + gx * (cellSize + gap) + cellSize / 2;
+        const py = off + gy * (cellSize + gap) + cellSize / 2;
+        const glowR = cellSize * 2.2;
+        const alpha = st.brightness * 0.35;
+        const grad = ctx.createRadialGradient(px, py, 0, px, py, glowR);
+        grad.addColorStop(0, `rgba(${st.r},${st.g},${st.b},${alpha})`);
+        grad.addColorStop(0.5, `rgba(${st.r},${st.g},${st.b},${alpha * 0.3})`);
+        grad.addColorStop(1, `rgba(${st.r},${st.g},${st.b},0)`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(px - glowR, py - glowR, glowR * 2, glowR * 2);
+      }
+    }
+  }
+
+  // Cell pass
+  for (let gy = 0; gy < GRID; gy++) {
+    for (let gx = 0; gx < GRID; gx++) {
+      const px = off + gx * (cellSize + gap);
+      const py = off + gy * (cellSize + gap);
+      const st = cells.get(gx + "," + gy);
+      const br = st ? st.brightness : 0;
+      ctx.beginPath();
+      ctx.roundRect(px, py, cellSize, cellSize, rad);
+      if (br > 0.03 && st) {
+        ctx.fillStyle = `rgb(${Math.round(st.r * (0.3 + 0.7 * br))},${Math.round(st.g * (0.3 + 0.7 * br))},${Math.round(st.b * (0.3 + 0.7 * br))})`;
+        ctx.fill();
+        if (doGlow && br > 0.4) {
+          const hx = px + cellSize / 2, hy = py + cellSize / 2;
+          const hGrad = ctx.createRadialGradient(hx, hy, 0, hx, hy, cellSize * 0.35);
+          hGrad.addColorStop(0, `rgba(255,255,230,${br * 0.5})`);
+          hGrad.addColorStop(1, `rgba(255,255,230,0)`);
+          ctx.fillStyle = hGrad;
+          ctx.beginPath();
+          ctx.roundRect(px, py, cellSize, cellSize, rad);
+          ctx.fill();
+        }
+      } else {
+        ctx.fillStyle = "#131312";
+        ctx.fill();
+      }
+    }
+  }
+}
+
+// ============================================================
+// ALL ANIMATION DEFINITIONS
+// ============================================================
+const ALL_ANIMS = {};
+
+// ── CATEGORY: Blob ──
+ALL_ANIMS["Blob"] = {
+
+"Living Plasma": {
+  desc: "Dense plasma fills grid, organic shifts",
+  params: { speed: { min: 0.2, max: 3, step: 0.1, def: 0.8 }, density: { min: 0.2, max: 1, step: 0.05, def: 0.7 }, contrast: { min: 1, max: 12, step: 0.5, def: 6 } },
+  fn(t, p) {
+    const cells = new Map();
+    for (let y = 0; y < GRID; y++) for (let x = 0; x < GRID; x++) {
+      const nx = x / GRID, ny = y / GRID;
+      const v1 = Math.sin(nx * 4 + t * p.speed) * Math.cos(ny * 3 - t * p.speed * 0.7);
+      const v2 = Math.sin((nx + ny) * 3 + t * p.speed * 1.3);
+      const v3 = Math.cos(nx * 2 - ny * 2 + t * p.speed * 0.5);
+      const raw = (v1 + v2 + v3) / 3 * 0.5 + 0.5;
+      const br = clamp(raw * p.density * 1.5);
+      if (br > 0.08) {
+        const pick = sigmoid(Math.sin(nx * 5 + t * p.speed * 0.3) * 0.5 + 0.5, p.contrast);
+        cells.set(`${x},${y}`, { brightness: br, r: lerp(COL_O.r, COL_B.r, pick), g: lerp(COL_O.g, COL_B.g, pick), b: lerp(COL_O.b, COL_B.b, pick) });
+      }
+    }
+    return cells;
+  }
+},
+
+"Breathing Orb": {
+  desc: "Large orb fills grid, breathes with color shift",
+  params: { speed: { min: 0.3, max: 3, step: 0.1, def: 0.7 }, size: { min: 1.5, max: 4, step: 0.1, def: 3.2 }, softness: { min: 0.5, max: 3, step: 0.1, def: 1.5 } },
+  fn(t, p) {
+    const cells = new Map();
+    const breathe = Math.sin(t * p.speed) * 0.3;
+    const radius = p.size + breathe;
+    for (let y = 0; y < GRID; y++) for (let x = 0; x < GRID; x++) {
+      const dist = Math.sqrt((x - CENTER) ** 2 + (y - CENTER) ** 2);
+      const br = clamp(1 - dist / (radius * p.softness / 1.5));
+      if (br > 0.05) {
+        const angle = Math.atan2(y - CENTER, x - CENTER);
+        const pick = sigmoid(Math.sin(angle * 2 + t * p.speed * 0.5) * 0.5 + 0.5, 6);
+        cells.set(`${x},${y}`, { brightness: br, r: lerp(COL_O.r, COL_B.r, pick), g: lerp(COL_O.g, COL_B.g, pick), b: lerp(COL_O.b, COL_B.b, pick) });
+      }
+    }
+    return cells;
+  }
+},
+
+"Amoeba": {
+  desc: "Organic shape with pseudopods, fills ~70% of grid",
+  params: { speed: { min: 0.3, max: 2, step: 0.1, def: 0.6 }, complexity: { min: 2, max: 6, step: 0.5, def: 3 }, fill: { min: 0.3, max: 1, step: 0.05, def: 0.75 } },
+  fn(t, p) {
+    const cells = new Map();
+    for (let y = 0; y < GRID; y++) for (let x = 0; x < GRID; x++) {
+      const angle = Math.atan2(y - CENTER, x - CENTER);
+      const dist = Math.sqrt((x - CENTER) ** 2 + (y - CENTER) ** 2);
+      let radius = 2.5 * p.fill;
+      for (let k = 1; k <= p.complexity; k++) radius += Math.sin(angle * k + t * p.speed * (1 + k * 0.3)) * 0.4 / k;
+      const edge = clamp(1 - (dist - radius) * 1.5);
+      if (edge > 0.05) {
+        const inner = clamp(1 - dist / 3.5);
+        const br = edge * 0.6 + inner * 0.4;
+        const cw = Math.sin(angle + t * p.speed * 0.4) * 0.5 + 0.5;
+        cells.set(`${x},${y}`, { brightness: clamp(br), r: lerp(COL_O.r, COL_B.r, cw), g: lerp(COL_O.g, COL_B.g, cw), b: lerp(COL_O.b, COL_B.b, cw) });
+      }
+    }
+    return cells;
+  }
+},
+
+"Nebula": {
+  desc: "Space-like gas cloud with drifting density",
+  params: { speed: { min: 0.1, max: 2, step: 0.1, def: 0.4 }, scale: { min: 0.5, max: 3, step: 0.1, def: 1.2 }, brightness: { min: 0.3, max: 1, step: 0.05, def: 0.8 } },
+  fn(t, p) {
+    const cells = new Map();
+    for (let y = 0; y < GRID; y++) for (let x = 0; x < GRID; x++) {
+      const nx = x / GRID * p.scale, ny = y / GRID * p.scale;
+      const n1 = fbm(nx + t * p.speed * 0.3, ny + t * p.speed * 0.2, 0);
+      const n2 = fbm(nx - t * p.speed * 0.2, ny + t * p.speed * 0.15, 50);
+      const density = clamp((n1 + n2) * p.brightness);
+      if (density > 0.06) {
+        const pick = sigmoid(n1 / (n1 + n2 + 0.001), 8);
+        cells.set(`${x},${y}`, { brightness: density, r: lerp(COL_O.r, COL_B.r, pick), g: lerp(COL_O.g, COL_B.g, pick), b: lerp(COL_O.b, COL_B.b, pick) });
+      }
+    }
+    return cells;
+  }
+},
+
+"Morphing Core": {
+  desc: "Dense bright core with shifting tendrils",
+  params: { speed: { min: 0.2, max: 2, step: 0.1, def: 0.5 }, arms: { min: 2, max: 6, step: 1, def: 3 }, glow: { min: 0.5, max: 2, step: 0.1, def: 1.2 } },
+  fn(t, p) {
+    const cells = new Map();
+    for (let y = 0; y < GRID; y++) for (let x = 0; x < GRID; x++) {
+      const dx = x - CENTER, dy = y - CENTER;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const angle = Math.atan2(dy, dx);
+      const core = clamp(1 - dist / 2) * p.glow;
+      let tendril = 0;
+      for (let a = 0; a < p.arms; a++) {
+        const armAngle = (a / p.arms) * Math.PI * 2 + t * p.speed;
+        const diff = Math.abs(Math.sin((angle - armAngle) / 2));
+        const armWidth = 0.3 + Math.sin(t * p.speed * 1.5 + a) * 0.1;
+        if (diff < armWidth) tendril = Math.max(tendril, (1 - diff / armWidth) * clamp(1 - dist / 4) * 0.7);
+      }
+      const br = clamp(core + tendril);
+      if (br > 0.05) {
+        const ca = Math.sin(angle * 2 + t * p.speed * 0.6) * 0.5 + 0.5;
+        const pick = sigmoid(ca, 5);
+        cells.set(`${x},${y}`, { brightness: br, r: lerp(COL_O.r, COL_B.r, pick), g: lerp(COL_O.g, COL_B.g, pick), b: lerp(COL_O.b, COL_B.b, pick) });
+      }
+    }
+    return cells;
+  }
+},
+
+"Sentient Glow": {
+  desc: "Aware presence — watches, shifts, breathes",
+  params: { speed: { min: 0.2, max: 1.5, step: 0.05, def: 0.4 }, awareness: { min: 0.5, max: 2, step: 0.1, def: 1 }, warmth: { min: 0, max: 1, step: 0.05, def: 0.5 } },
+  fn(t, p) {
+    const cells = new Map();
+    const cx = CENTER + Math.sin(t * p.speed * 0.5) * 0.5;
+    const cy = CENTER + Math.cos(t * p.speed * 0.4) * 0.5;
+    const breathe = Math.sin(t * p.speed) * 0.15 + 0.85;
+    for (let y = 0; y < GRID; y++) for (let x = 0; x < GRID; x++) {
+      const dx = x - cx, dy = y - cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const angle = Math.atan2(dy, dx);
+      const baseGlow = clamp(1 - dist / 4.5) * breathe;
+      const edgeWobble = Math.sin(angle * 3 + t * p.speed) * 0.15 + Math.sin(angle * 5 - t * p.speed * 1.3) * 0.1;
+      const edge = clamp(1 - (dist - (3 + edgeWobble)) * p.awareness);
+      const br = clamp(baseGlow * 0.7 + edge * 0.4);
+      if (br > 0.04) {
+        const centerBlend = clamp(1 - dist / 3);
+        const colorT = lerp(1 - p.warmth, p.warmth, centerBlend);
+        cells.set(`${x},${y}`, { brightness: br, r: lerp(COL_B.r, COL_O.r, colorT), g: lerp(COL_B.g, COL_O.g, colorT), b: lerp(COL_B.b, COL_O.b, colorT) });
+      }
+    }
+    return cells;
+  }
+},
+
+"Magma Flow": {
+  desc: "Hot dense magma oozing and glowing",
+  params: { speed: { min: 0.2, max: 2, step: 0.1, def: 0.4 }, heat: { min: 0.4, max: 1, step: 0.05, def: 0.85 }, flow: { min: 0.5, max: 3, step: 0.1, def: 1.5 } },
+  fn(t, p) {
+    const cells = new Map();
+    for (let y = 0; y < GRID; y++) for (let x = 0; x < GRID; x++) {
+      const nx = x / GRID, ny = y / GRID;
+      const flow1 = Math.sin(nx * p.flow * 3 + t * p.speed + ny * 2) * 0.4;
+      const flow2 = Math.cos(ny * p.flow * 2.5 - t * p.speed * 0.6 + nx) * 0.3;
+      const base = fbm(nx + flow1, ny + flow2, t * p.speed * 0.3);
+      const hot = Math.sin(t * p.speed * 1.5 + x * 0.5 + y * 0.7) * 0.2 + 0.8;
+      const br = clamp(base * p.heat * hot * 1.5);
+      if (br > 0.05) {
+        const temp = clamp(br / p.heat);
+        cells.set(`${x},${y}`, { brightness: br, r: lerp(COL_B.r, COL_O.r, temp), g: lerp(COL_B.g, COL_O.g, temp), b: lerp(COL_B.b, COL_O.b, temp) });
+      }
+    }
+    return cells;
+  }
+},
+
+};
+
+// ── CATEGORY: Face ──
+ALL_ANIMS["Face"] = {
+
+"Blinker": {
+  desc: "Simple face with eyes that blink periodically",
+  params: { speed: { min: 0.5, max: 3, step: 0.1, def: 1 }, blinkRate: { min: 1, max: 5, step: 0.5, def: 3 } },
+  fn(t, p) {
+    const cells = new Map();
+    const blinkPhase = (t * p.speed) % p.blinkRate;
+    const eyeOpen = blinkPhase > 0.15;
+    if (eyeOpen) { setCell(cells, 2, 2, 0.9, COL_B); setCell(cells, 4, 2, 0.9, COL_B); }
+    else { setCell(cells, 2, 3, 0.5, COL_B); setCell(cells, 4, 3, 0.5, COL_B); }
+    setCell(cells, 2, 5, 0.6, COL_O); setCell(cells, 3, 5, 0.7, COL_O); setCell(cells, 4, 5, 0.6, COL_O);
+    return cells;
+  }
+},
+
+"Looker": {
+  desc: "Eyes slowly look left, center, right, center — with blinks",
+  params: { speed: { min: 0.3, max: 2, step: 0.1, def: 0.6 }, blinkRate: { min: 2, max: 6, step: 0.5, def: 3.5 } },
+  fn(t, p) {
+    const cells = new Map();
+    const lookPhase = (t * p.speed) % 4;
+    let eyeOffX = 0;
+    if (lookPhase < 1) eyeOffX = 0; else if (lookPhase < 2) eyeOffX = -1; else if (lookPhase < 3) eyeOffX = 0; else eyeOffX = 1;
+    const blinkPhase = (t * p.speed * 1.7) % p.blinkRate;
+    const eyeOpen = blinkPhase > 0.12;
+    for (let i = 1; i <= 5; i++) setCell(cells, i, 2, 0.12, COL_B);
+    if (eyeOpen) { setCell(cells, 2 + eyeOffX, 2, 0.9, COL_B); setCell(cells, 4 + eyeOffX, 2, 0.9, COL_B); }
+    else { setCell(cells, 1, 3, 0.3, COL_B); setCell(cells, 2, 3, 0.4, COL_B); setCell(cells, 4, 3, 0.4, COL_B); setCell(cells, 5, 3, 0.3, COL_B); }
+    setCell(cells, 2, 5, 0.5, COL_O); setCell(cells, 3, 5, 0.6, COL_O); setCell(cells, 4, 5, 0.5, COL_O);
+    return cells;
+  }
+},
+
+"Pixel Cat": {
+  desc: "Cat face with twitching ears and slow blinks",
+  params: { speed: { min: 0.3, max: 2, step: 0.1, def: 0.7 }, earTwitch: { min: 0.5, max: 3, step: 0.1, def: 1.5 } },
+  fn(t, p) {
+    const cells = new Map();
+    const twitch = Math.sin(t * p.earTwitch) > 0.7;
+    setCell(cells, 1, 0, twitch ? 0.8 : 0.6, COL_O); setCell(cells, 0, 1, 0.4, COL_O);
+    setCell(cells, 5, 0, twitch ? 0.6 : 0.8, COL_O); setCell(cells, 6, 1, 0.4, COL_O);
+    setCell(cells, 1, 1, 0.2, COL_O); setCell(cells, 5, 1, 0.2, COL_O);
+    const blinkPhase = (t * p.speed) % 4;
+    if (blinkPhase > 0.15) { setCell(cells, 2, 2, 0.9, COL_B); setCell(cells, 4, 2, 0.9, COL_B); }
+    else { setCell(cells, 2, 3, 0.4, COL_B); setCell(cells, 4, 3, 0.4, COL_B); }
+    setCell(cells, 3, 3, 0.5, COL_O);
+    setCell(cells, 0, 3, 0.2, COL_W); setCell(cells, 1, 4, 0.15, COL_W);
+    setCell(cells, 6, 3, 0.2, COL_W); setCell(cells, 5, 4, 0.15, COL_W);
+    setCell(cells, 2, 4, 0.3, COL_O); setCell(cells, 4, 4, 0.3, COL_O);
+    return cells;
+  }
+},
+
+"Ghost": {
+  desc: "Cute ghost that floats up and down with wobbling bottom",
+  params: { speed: { min: 0.2, max: 1.5, step: 0.05, def: 0.5 }, wobble: { min: 0.5, max: 3, step: 0.1, def: 1.5 } },
+  fn(t, p) {
+    const cells = new Map();
+    const floatY = Math.sin(t * p.speed) * 0.6;
+    const shape = [[0,0,1,1,1,0,0],[0,1,1,1,1,1,0],[0,1,1,1,1,1,0],[0,1,1,1,1,1,0],[0,1,1,1,1,1,0],[1,0,1,0,1,0,1]];
+    const w = Math.sin(t * p.wobble * 2);
+    const bottom = w > 0 ? [1,0,1,0,1,0,1] : [0,1,0,1,0,1,0];
+    for (let y = 0; y < shape.length; y++) {
+      for (let x = 0; x < 7; x++) {
+        const row = y === shape.length - 1 ? bottom : shape[y];
+        if (!row[x]) continue;
+        const fy = Math.round(y + floatY);
+        if (fy < 0 || fy >= GRID) continue;
+        setCell(cells, x, fy, 0.6, COL_B);
+      }
+    }
+    const ey = Math.round(2 + floatY);
+    if (ey >= 0 && ey < GRID) { setCell(cells, 2, ey, 0.9, COL_O); setCell(cells, 4, ey, 0.9, COL_O); }
+    return cells;
+  }
+},
+
+"Heart Eyes": {
+  desc: "Face with pulsing heart-shaped eyes",
+  params: { speed: { min: 0.3, max: 2, step: 0.1, def: 0.8 }, pulse: { min: 0.3, max: 1, step: 0.05, def: 0.6 } },
+  fn(t, p) {
+    const cells = new Map();
+    const beat = 0.5 + Math.abs(Math.sin(t * p.speed * 2)) * p.pulse;
+    setCell(cells, 1, 1, 0.6*beat, COL_O); setCell(cells, 3, 1, 0.6*beat, COL_O);
+    setCell(cells, 1, 2, 0.8*beat, COL_O); setCell(cells, 2, 2, 0.9*beat, COL_O); setCell(cells, 3, 2, 0.8*beat, COL_O);
+    setCell(cells, 2, 3, 0.5*beat, COL_O);
+    setCell(cells, 4, 1, 0.6*beat, COL_O); setCell(cells, 6, 1, 0.6*beat, COL_O);
+    setCell(cells, 4, 2, 0.8*beat, COL_O); setCell(cells, 5, 2, 0.9*beat, COL_O); setCell(cells, 6, 2, 0.8*beat, COL_O);
+    setCell(cells, 5, 3, 0.5*beat, COL_O);
+    setCell(cells, 2, 5, 0.5, COL_B); setCell(cells, 3, 6, 0.6, COL_B); setCell(cells, 4, 5, 0.5, COL_B);
+    return cells;
+  }
+},
+
+"Bot Face": {
+  desc: "Robotic face with rectangular eyes and antenna pulse",
+  params: { speed: { min: 0.3, max: 2, step: 0.1, def: 0.8 }, antenna: { min: 0.3, max: 1, step: 0.1, def: 0.7 } },
+  fn(t, p) {
+    const cells = new Map();
+    const pulse = (Math.sin(t * p.speed * 3) + 1) / 2;
+    setCell(cells, 3, 0, pulse * p.antenna, COL_O);
+    for (let x = 1; x <= 5; x++) { setCell(cells, x, 1, 0.15, COL_B); setCell(cells, x, 6, 0.15, COL_B); }
+    for (let y = 1; y <= 6; y++) { setCell(cells, 1, y, 0.15, COL_B); setCell(cells, 5, y, 0.15, COL_B); }
+    const blinkPhase = (t * p.speed) % 3;
+    if (blinkPhase > 0.1) {
+      setCell(cells, 2, 3, 0.85, COL_B); setCell(cells, 3, 3, 0.6, COL_B); setCell(cells, 4, 3, 0.85, COL_B);
+      setCell(cells, 2, 2, 0.5, COL_B); setCell(cells, 4, 2, 0.5, COL_B);
+    } else { setCell(cells, 2, 3, 0.4, COL_B); setCell(cells, 3, 3, 0.4, COL_B); setCell(cells, 4, 3, 0.4, COL_B); }
+    const mouthW = Math.round(1 + Math.sin(t * p.speed * 1.5) * 1);
+    for (let x = 3 - mouthW; x <= 3 + mouthW; x++) setCell(cells, x, 5, 0.6, COL_O);
+    return cells;
+  }
+},
+
+};
+
+// ── CATEGORY: Idle ──
+ALL_ANIMS["Idle"] = {
+
+"Plasma Sharp": {
+  desc: "Classic plasma with hard orange/blue boundaries",
+  params: { speed: { min: 0.05, max: 1, step: 0.05, def: 0.3 }, softness: { min: 0.5, max: 3, step: 0.1, def: 1.5 }, sharpness: { min: 1, max: 12, step: 0.5, def: 5 } },
+  fn(t, p) {
+    const cells = new Map();
+    for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
+      const v1 = Math.sin(gx*p.softness*0.6+t*p.speed), v2 = Math.sin(gy*p.softness*0.5+t*p.speed*1.3);
+      const v3 = Math.sin((gx+gy)*p.softness*0.35+t*p.speed*0.7), v4 = Math.sin(Math.sqrt((gx-3)**2+(gy-3)**2)*p.softness*0.8-t*p.speed*0.9);
+      const br = ((v1+v2+v3+v4)/4+1)/2;
+      if (br < 0.1) continue;
+      const c1 = Math.sin(gx*0.9+t*p.speed*0.5+1), c2 = Math.sin(gy*0.7+t*p.speed*0.6+2), c3 = Math.sin((gx-gy)*0.6+t*p.speed*0.4);
+      const mix = 1/(1+Math.exp(-(c1+c2+c3)/3*p.sharpness));
+      const c = mix > 0.5 ? COL_B : COL_O;
+      cells.set(gx+","+gy, { brightness: br*0.9, r: c.r, g: c.g, b: c.b });
+    }
+    return cells;
+  }
+},
+
+"Lava Blobs": {
+  desc: "Two metaball blobs wander — one orange, one blue",
+  params: { speed: { min: 0.1, max: 1, step: 0.05, def: 0.3 }, softness: { min: 0.8, max: 3, step: 0.1, def: 1.6 }, size: { min: 0.5, max: 2, step: 0.1, def: 1.2 } },
+  fn(t, p) {
+    const cells = new Map();
+    const s = p.speed;
+    const ax = CENTER+Math.sin(t*s*0.7)*2.2+Math.sin(t*s*1.3)*0.5;
+    const ay = CENTER+Math.cos(t*s*0.9)*2+Math.sin(t*s*0.5)*0.8;
+    const bx = CENTER+Math.sin(t*s*0.6+2.5)*2+Math.cos(t*s*1.1)*0.6;
+    const by = CENTER+Math.cos(t*s*0.8+1.8)*2.2+Math.sin(t*s*0.7+1)*0.5;
+    for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
+      const dA = Math.sqrt((gx-ax)**2+(gy-ay)**2), dB = Math.sqrt((gx-bx)**2+(gy-by)**2);
+      const sz = p.softness * p.size;
+      const fA = 1/(1+dA*dA/(sz*sz)), fB = 1/(1+dB*dB/(sz*sz));
+      const total = fA + fB;
+      if (total < 0.12) continue;
+      const c = fA > fB ? COL_O : COL_B;
+      cells.set(gx+","+gy, { brightness: Math.min(1, total*0.9), r: c.r, g: c.g, b: c.b });
+    }
+    return cells;
+  }
+},
+
+"Dual Orbit": {
+  desc: "Orange and blue dots orbit center in opposite directions",
+  params: { speed: { min: 0.3, max: 3, step: 0.1, def: 1.2 }, radius: { min: 1, max: 3, step: 0.1, def: 2.3 }, glow: { min: 0.5, max: 2, step: 0.1, def: 1.3 } },
+  fn(t, p) {
+    const cells = new Map();
+    cells.set(CENTER+","+CENTER, { brightness: 0.2, ...blendColor(0.5) });
+    const dots = [{ angle: t*p.speed, color: COL_O }, { angle: -t*p.speed+Math.PI, color: COL_B }];
+    for (const dot of dots) {
+      const fx = CENTER+Math.cos(dot.angle)*p.radius, fy = CENTER+Math.sin(dot.angle)*p.radius;
+      for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
+        const dist = Math.sqrt((gx-fx)**2+(gy-fy)**2);
+        if (dist > p.glow+1) continue;
+        const br = Math.max(0, 1-dist/p.glow)*0.95;
+        if (br < 0.03) continue;
+        const key = gx+","+gy;
+        const ex = cells.get(key);
+        if (!ex || ex.brightness < br) cells.set(key, { brightness: br, r: dot.color.r, g: dot.color.g, b: dot.color.b });
+      }
+    }
+    return cells;
+  }
+},
+
+"Yin Yang": {
+  desc: "Slow rotating split — orange and blue halves rotate",
+  params: { speed: { min: 0.1, max: 1.5, step: 0.05, def: 0.4 }, fade: { min: 0.2, max: 1, step: 0.05, def: 0.6 }, curve: { min: 0, max: 1, step: 0.1, def: 0.4 } },
+  fn(t, p) {
+    const cells = new Map();
+    const angle = t * p.speed;
+    for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
+      const dx = gx-CENTER, dy = gy-CENTER;
+      const dist = Math.sqrt(dx*dx+dy*dy);
+      if (dist > 3.6) continue;
+      const a = Math.atan2(dy, dx) - angle + dist * p.curve * 0.3;
+      const side = Math.sin(a);
+      const br = (1 - dist/4.5) * (p.fade + (1-p.fade)*Math.abs(side));
+      if (br < 0.04) continue;
+      const c = side > 0 ? COL_O : COL_B;
+      cells.set(gx+","+gy, { brightness: br*0.85, r: c.r, g: c.g, b: c.b });
+    }
+    return cells;
+  }
+},
+
+"Campfire": {
+  desc: "Orange flames below, blue smoke rising above",
+  params: { speed: { min: 0.5, max: 4, step: 0.1, def: 2 }, split: { min: 2, max: 5, step: 0.5, def: 3.5 }, width: { min: 1, max: 3, step: 0.1, def: 2 } },
+  fn(t, p) {
+    const cells = new Map();
+    for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
+      const wFade = Math.max(0, 1-Math.abs(gx-CENTER)/p.width);
+      const flicker = Math.sin(gx*2.3+t*p.speed*2.1+gy*0.7)*0.3+Math.sin(gy*1.7-t*p.speed*3.2+gx*1.1)*0.3+Math.sin((gx+gy)*1.5+t*p.speed*1.7)*0.2+0.5;
+      const fireH = Math.max(0, 1-(GRID-1-gy)/p.split);
+      const smokeH = Math.max(0, 1-gy/(GRID-p.split))*0.5;
+      const fireBr = fireH*wFade*flicker, smokeBr = smokeH*wFade*flicker;
+      if (fireBr > smokeBr && fireBr > 0.05) cells.set(gx+","+gy, { brightness: Math.min(1,fireBr), r: COL_O.r, g: COL_O.g, b: COL_O.b });
+      else if (smokeBr > 0.05) cells.set(gx+","+gy, { brightness: Math.min(1,smokeBr), r: COL_B.r, g: COL_B.g, b: COL_B.b });
+    }
+    return cells;
+  }
+},
+
+"Aurora": {
+  desc: "Horizontal bands shimmer like northern lights",
+  params: { speed: { min: 0.1, max: 1, step: 0.05, def: 0.3 }, waves: { min: 0.3, max: 2, step: 0.1, def: 0.8 }, drift: { min: 0.1, max: 1, step: 0.05, def: 0.4 } },
+  fn(t, p) {
+    const cells = new Map();
+    for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
+      const wave = Math.sin(gy*p.waves+t*p.speed+Math.sin(gx*0.5+t*p.drift)*0.8);
+      const shimmer = Math.sin(gx*1.3+gy*0.7+t*p.speed*3)*0.15+0.85;
+      const br = (wave+1)/2*shimmer*0.85;
+      if (br < 0.08) continue;
+      const c = Math.sin(gy*0.6+t*p.speed*0.7+1.5) > 0 ? COL_O : COL_B;
+      cells.set(gx+","+gy, { brightness: br, r: c.r, g: c.g, b: c.b });
+    }
+    return cells;
+  }
+},
+
+};
+
+// ── CATEGORY: Thinking ──
+ALL_ANIMS["Thinking"] = {
+
+"Ripple": {
+  desc: "Concentric rings pulse outward from center", hasColor: true,
+  params: { speed: { min: 0.3, max: 5, step: 0.1, def: 1.8 }, spacing: { min: 0.3, max: 2, step: 0.1, def: 0.8 }, falloff: { min: 0, max: 0.6, step: 0.05, def: 0.15 } },
+  fn(t, p, c) {
+    const cells = new Map();
+    const phase = (t * p.speed) % 4;
+    for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
+      const dist = Math.abs(gx-CENTER)+Math.abs(gy-CENTER);
+      const wave = phase - dist*p.spacing;
+      const b = Math.max(0, Math.sin(wave*Math.PI)*Math.exp(-dist*p.falloff));
+      if (b > 0.02) cells.set(gx+","+gy, col(c, b));
+    }
+    return cells;
+  }
+},
+
+"Orbit": {
+  desc: "Pixels orbit the center at different radii", hasColor: true,
+  params: { speed: { min: 0.3, max: 5, step: 0.1, def: 2 }, dots: { min: 1, max: 6, step: 1, def: 3 }, radius: { min: 1, max: 3, step: 0.1, def: 2.5 } },
+  fn(t, p, c) {
+    const cells = new Map();
+    cells.set(CENTER+","+CENTER, col(c, 0.4));
+    for (let i = 0; i < p.dots; i++) {
+      const orbitR = p.radius - (i%2)*p.radius*0.3;
+      const spd = p.speed*(1-(i%2)*0.3);
+      const angle = t*spd+(i/p.dots)*Math.PI*2;
+      const fx = CENTER+Math.cos(angle)*orbitR, fy = CENTER+Math.sin(angle)*orbitR;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = Math.round(fx)+dx, ny = Math.round(fy)+dy;
+        if (nx < 0||nx >= GRID||ny < 0||ny >= GRID) continue;
+        const dist = Math.sqrt((fx-nx)**2+(fy-ny)**2);
+        const b = Math.max(0, 1-dist*0.7)*0.95;
+        if (b > 0.05) { const key = nx+","+ny; const ex = cells.get(key); if (!ex||ex.brightness < b) cells.set(key, col(c, b)); }
+      }
+    }
+    return cells;
+  }
+},
+
+"Breathe": {
+  desc: "Diamond shape breathes in and out from center", hasColor: true,
+  params: { speed: { min: 0.3, max: 5, step: 0.1, def: 1.8 }, size: { min: 1.5, max: 4, step: 0.1, def: 3.2 }, min: { min: 0, max: 2, step: 0.1, def: 0.5 } },
+  fn(t, p, c) {
+    const cells = new Map();
+    const phase = (Math.sin(t*p.speed)+1)/2;
+    const radius = p.min + phase*p.size;
+    for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
+      const dist = Math.abs(gx-CENTER)+Math.abs(gy-CENTER);
+      if (dist > radius+0.5) continue;
+      const edge = radius-dist;
+      const b = Math.min(1, Math.max(0, edge+0.5))*(0.4+0.6*(1-dist/(p.size+1)));
+      if (b > 0.02) cells.set(gx+","+gy, col(c, b));
+    }
+    return cells;
+  }
+},
+
+"Sweep": {
+  desc: "Radar beam sweeps around center with a fade trail", hasColor: true,
+  params: { speed: { min: 0.3, max: 5, step: 0.1, def: 2.2 }, trail: { min: 0.5, max: 4, step: 0.1, def: 1.8 }, reach: { min: 1.5, max: 3.5, step: 0.1, def: 3.5 } },
+  fn(t, p, c) {
+    const cells = new Map();
+    const angle = t*p.speed;
+    for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
+      const dx = gx-CENTER, dy = gy-CENTER;
+      const dist = Math.sqrt(dx*dx+dy*dy);
+      if (dist < 0.5) { cells.set(gx+","+gy, col(c, 0.5)); continue; }
+      if (dist > p.reach) continue;
+      let diff = ((angle-Math.atan2(dy,dx))%(Math.PI*2)+Math.PI*2)%(Math.PI*2);
+      if (diff < p.trail) { const b = (1-diff/p.trail)*0.9*Math.min(1, dist/1.5); if (b > 0.02) cells.set(gx+","+gy, col(c, b)); }
+    }
+    return cells;
+  }
+},
+
+"Spiral": {
+  desc: "Spiral arms radiate outward from center", hasColor: true,
+  params: { speed: { min: 0.3, max: 5, step: 0.1, def: 2 }, arms: { min: 1, max: 5, step: 1, def: 2 }, twist: { min: 0.3, max: 3, step: 0.1, def: 1.2 } },
+  fn(t, p, c) {
+    const cells = new Map();
+    for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
+      const dx = gx-CENTER, dy = gy-CENTER;
+      const dist = Math.sqrt(dx*dx+dy*dy);
+      if (dist < 0.3||dist > 3.6) continue;
+      const angle = Math.atan2(dy, dx);
+      const wave = (Math.sin(angle*p.arms-dist*p.twist+t*p.speed)+1)/2;
+      const b = wave*(1-dist/4)*0.9;
+      if (b > 0.04) cells.set(gx+","+gy, col(c, b));
+    }
+    cells.set(CENTER+","+CENTER, col(c, 0.5+Math.sin(t*3)*0.2));
+    return cells;
+  }
+},
+
+"Bounce": {
+  desc: "Bright dot bounces around with trail", hasColor: true,
+  params: { speed: { min: 0.5, max: 4, step: 0.1, def: 1.8 }, trail: { min: 1, max: 5, step: 0.5, def: 3 }, glow: { min: 0.5, max: 2, step: 0.1, def: 1.2 } },
+  fn(t, p, c) {
+    const cells = new Map();
+    const fx = CENTER+Math.sin(t*p.speed*1.7)*2.5, fy = CENTER+Math.sin(t*p.speed*2.3)*2.5;
+    for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
+      const dist = Math.sqrt((gx-fx)**2+(gy-fy)**2);
+      if (dist > p.glow+1) continue;
+      const b = Math.max(0, 1-dist/p.glow)*0.95;
+      if (b > 0.03) cells.set(gx+","+gy, col(c, b));
+    }
+    for (let i = 1; i <= 3; i++) {
+      const tt = t-i*0.08*p.trail;
+      const gfx = CENTER+Math.sin(tt*p.speed*1.7)*2.5, gfy = CENTER+Math.sin(tt*p.speed*2.3)*2.5;
+      const gx = Math.round(gfx), gy = Math.round(gfy);
+      if (gx >= 0&&gx < GRID&&gy >= 0&&gy < GRID) {
+        const key = gx+","+gy; const fade = 0.4*(1-i/4);
+        const ex = cells.get(key); if (!ex||ex.brightness < fade) cells.set(key, col(c, fade));
+      }
+    }
+    return cells;
+  }
+},
+
+"DNA": {
+  desc: "Double helix twists vertically", hasColor: true,
+  params: { speed: { min: 0.5, max: 5, step: 0.1, def: 2.5 }, twist: { min: 0.5, max: 3, step: 0.1, def: 1.4 }, spread: { min: 0.5, max: 2.5, step: 0.1, def: 1.5 } },
+  fn(t, p, c) {
+    const cells = new Map();
+    for (let gy = 0; gy < GRID; gy++) {
+      const x1 = CENTER+Math.sin(gy*p.twist-t*p.speed)*p.spread;
+      const x2 = CENTER+Math.sin(gy*p.twist-t*p.speed+Math.PI)*p.spread;
+      for (let gx = 0; gx < GRID; gx++) {
+        const d1 = Math.abs(gx-x1), d2 = Math.abs(gx-x2);
+        const b1 = d1 < 1.2 ? Math.max(0, 1-d1*0.8) : 0;
+        const b2 = d2 < 1.2 ? Math.max(0, 1-d2*0.8) : 0;
+        let b = Math.max(b1, b2);
+        const midX = (x1+x2)/2, half = Math.abs(x1-x2)/2;
+        const rung = (gy%2===0&&Math.abs(gx-midX)<half&&half>0.5) ? 0.3*(1-Math.abs(gx-midX)/half) : 0;
+        b = Math.min(1, Math.max(b, rung));
+        if (b > 0.05) cells.set(gx+","+gy, col(c, b*0.9));
+      }
+    }
+    return cells;
+  }
+},
+
+"Vortex": {
+  desc: "Pixels spiral inward like a whirlpool", hasColor: true,
+  params: { speed: { min: 0.5, max: 5, step: 0.1, def: 2.5 }, tightness: { min: 0.3, max: 2, step: 0.1, def: 0.8 }, falloff: { min: 0.1, max: 0.5, step: 0.05, def: 0.25 } },
+  fn(t, p, c) {
+    const cells = new Map();
+    for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
+      const dx = gx-CENTER, dy = gy-CENTER;
+      const dist = Math.sqrt(dx*dx+dy*dy);
+      if (dist < 0.1) { cells.set(gx+","+gy, col(c, 0.8)); continue; }
+      const angle = Math.atan2(dy, dx);
+      const spiral = Math.sin(angle-dist*p.tightness+t*p.speed);
+      const b = Math.max(0, spiral)*Math.exp(-dist*p.falloff)*0.95;
+      if (b > 0.04) cells.set(gx+","+gy, col(c, b));
+    }
+    return cells;
+  }
+},
+
+"Fire": {
+  desc: "Flames rising upward with flickering intensity", hasColor: true,
+  params: { speed: { min: 0.5, max: 5, step: 0.1, def: 3 }, width: { min: 1, max: 3, step: 0.1, def: 2 }, height: { min: 2, max: 6, step: 0.5, def: 5 } },
+  fn(t, p, c) {
+    const cells = new Map();
+    for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
+      const fromBottom = GRID-1-gy;
+      const hFactor = Math.max(0, 1-fromBottom/p.height);
+      const wFade = Math.max(0, 1-Math.abs(gx-CENTER)/p.width);
+      const flicker = Math.sin(gx*2.3+t*p.speed*2.1+gy*0.7)*0.3+Math.sin(gy*1.7-t*p.speed*3.2+gx*1.1)*0.3+Math.sin((gx+gy)*1.5+t*p.speed*1.7)*0.2+0.5;
+      const b = hFactor*wFade*flicker;
+      if (b > 0.05) cells.set(gx+","+gy, col(c, Math.min(1, b)));
+    }
+    return cells;
+  }
+},
+
+"Pinwheel": {
+  desc: "Rotating pinwheel with alternating bright/dark sectors", hasColor: true,
+  params: { speed: { min: 0.3, max: 4, step: 0.1, def: 1.5 }, blades: { min: 2, max: 6, step: 1, def: 4 }, curve: { min: 0, max: 2, step: 0.1, def: 0.5 } },
+  fn(t, p, c) {
+    const cells = new Map();
+    for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
+      const dx = gx-CENTER, dy = gy-CENTER;
+      const dist = Math.sqrt(dx*dx+dy*dy);
+      if (dist < 0.3) { cells.set(gx+","+gy, col(c, 0.6)); continue; }
+      if (dist > 3.6) continue;
+      const angle = Math.atan2(dy, dx)+dist*p.curve;
+      const sector = (Math.sin(angle*p.blades-t*p.speed*3)+1)/2;
+      const b = sector*(1-dist/4.5)*0.9;
+      if (b > 0.04) cells.set(gx+","+gy, col(c, b));
+    }
+    return cells;
+  }
+},
+
+"Heartbeat": {
+  desc: "EKG-style pulse line with sharp spikes", hasColor: true,
+  params: { speed: { min: 0.5, max: 4, step: 0.1, def: 1.5 }, spike: { min: 1, max: 3, step: 0.1, def: 2.5 }, rest: { min: 0.3, max: 2, step: 0.1, def: 0.6 } },
+  fn(t, p, c) {
+    const cells = new Map();
+    for (let gx = 0; gx < GRID; gx++) {
+      const phase = ((gx*0.4-t*p.speed*3)%(Math.PI*2)+Math.PI*2)%(Math.PI*2);
+      let y = CENTER;
+      if (phase >= 0.8&&phase < 1.2) y = CENTER-p.spike*Math.sin((phase-0.8)/0.4*Math.PI);
+      else if (phase >= 1.2&&phase < 1.6) y = CENTER+p.spike*0.4*Math.sin((phase-1.2)/0.4*Math.PI);
+      for (let gy = 0; gy < GRID; gy++) {
+        const dist = Math.abs(gy-y);
+        if (dist > 1.2) continue;
+        const b = Math.max(0, 1-dist*p.rest)*0.9;
+        if (b > 0.03) cells.set(gx+","+gy, col(c, b));
+      }
+    }
+    return cells;
+  }
+},
+
+"Plasma": {
+  desc: "Classic plasma — overlapping sine fields create organic blobs", hasColor: true,
+  params: { speed: { min: 0.3, max: 5, step: 0.1, def: 1.5 }, scale1: { min: 0.3, max: 2, step: 0.1, def: 0.8 }, scale2: { min: 0.3, max: 2, step: 0.1, def: 0.6 } },
+  fn(t, p, c) {
+    const cells = new Map();
+    for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
+      const v1 = Math.sin(gx*p.scale1+t*p.speed), v2 = Math.sin(gy*p.scale2+t*p.speed*1.3);
+      const v3 = Math.sin((gx+gy)*0.5+t*p.speed*0.7), v4 = Math.sin(Math.sqrt((gx-3)**2+(gy-3)**2)*1.2-t*p.speed*0.9);
+      const b = ((v1+v2+v3+v4)/4+1)/2;
+      if (b > 0.15) cells.set(gx+","+gy, col(c, b*0.9));
+    }
+    return cells;
+  }
+},
+
+"Crosshair": {
+  desc: "Rotating cross/plus shape that pulses", hasColor: true,
+  params: { speed: { min: 0.3, max: 4, step: 0.1, def: 1.2 }, width: { min: 0.3, max: 1.5, step: 0.1, def: 0.6 }, pulse: { min: 0, max: 3, step: 0.1, def: 1.5 } },
+  fn(t, p, c) {
+    const cells = new Map();
+    const angle = t*p.speed;
+    const pulseBr = 0.6+Math.sin(t*p.pulse)*0.3;
+    for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
+      const dx = gx-CENTER, dy = gy-CENTER;
+      const dist = Math.sqrt(dx*dx+dy*dy);
+      if (dist < 0.1) { cells.set(gx+","+gy, col(c, 0.8)); continue; }
+      if (dist > 3.6) continue;
+      const rx = dx*Math.cos(angle)+dy*Math.sin(angle);
+      const ry = -dx*Math.sin(angle)+dy*Math.cos(angle);
+      const crossDist = Math.min(Math.abs(rx), Math.abs(ry));
+      if (crossDist > p.width) continue;
+      const b = (1-crossDist/p.width)*(1-dist/4)*pulseBr;
+      if (b > 0.04) cells.set(gx+","+gy, col(c, b));
+    }
+    return cells;
+  }
+},
+
+"Wave": {
+  desc: "Sine wave of light rolls across the grid", hasColor: true,
+  params: { speed: { min: 0.5, max: 8, step: 0.1, def: 3 }, freq: { min: 0.3, max: 3, step: 0.1, def: 1.2 }, amp: { min: 0.5, max: 3, step: 0.1, def: 2.2 } },
+  fn(t, p, c) {
+    const cells = new Map();
+    for (let gx = 0; gx < GRID; gx++) {
+      const fy = CENTER+Math.sin(gx*p.freq-t*p.speed)*p.amp;
+      for (let gy = 0; gy < GRID; gy++) {
+        const dist = Math.abs(gy-fy);
+        if (dist > 1.5) continue;
+        const b = Math.max(0, 1-dist*0.7);
+        if (b > 0.02) cells.set(gx+","+gy, col(c, b));
+      }
+    }
+    return cells;
+  }
+},
+
+"Atom": {
+  desc: "Electron orbits around a nucleus in tilted planes", hasColor: true,
+  params: { speed: { min: 0.5, max: 5, step: 0.1, def: 2.5 }, orbits: { min: 2, max: 4, step: 1, def: 3 }, radius: { min: 1.5, max: 3, step: 0.1, def: 2.5 } },
+  fn(t, p, c) {
+    const cells = new Map();
+    cells.set(CENTER+","+CENTER, col(c, 0.7+Math.sin(t*4)*0.15));
+    for (let i = 0; i < p.orbits; i++) {
+      const tilt = (i/p.orbits)*Math.PI;
+      const angle = t*p.speed*(1+i*0.2)+i*2;
+      const ex = CENTER+Math.cos(angle)*p.radius;
+      const ey = CENTER+Math.sin(angle)*p.radius*Math.cos(tilt);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = Math.round(ex)+dx, ny = Math.round(ey)+dy;
+        if (nx < 0||nx >= GRID||ny < 0||ny >= GRID) continue;
+        const dist = Math.sqrt((ex-nx)**2+(ey-ny)**2);
+        const b = Math.max(0, 1-dist*0.7)*0.95;
+        if (b > 0.05) { const key = nx+","+ny; const existing = cells.get(key); if (!existing||existing.brightness < b) cells.set(key, col(c, b)); }
+      }
+    }
+    return cells;
+  }
+},
+
+};
+
+
+// ============================================================
+// UI STATE
+// ============================================================
+let currentCategory = "Blob";
+let currentAnimName = null;
+let currentAnim = null;
+let currentParams = {};
+let currentColor = { r: 255, g: 210, b: 50 };
+let currentHex = "#ffd232";
+let playing = false;
+let elapsed = 0;
+let lastTime = 0;
+
+const mainCanvas = document.getElementById("mainCanvas");
+const mainCtx = mainCanvas.getContext("2d");
+const EXTRA_SIZES = [16, 20, 48];
+let extraCanvases = [];
+
+// Build size row
+function buildSizesRow() {
+  const row = document.getElementById("sizesRow");
+  row.innerHTML = "";
+  extraCanvases = [];
+  for (const sz of EXTRA_SIZES) {
+    const item = document.createElement("div");
+    item.className = "size-item";
+    const c = document.createElement("canvas");
+    c.width = sz * DPR;
+    c.height = sz * DPR;
+    c.style.width = sz + "px";
+    c.style.height = sz + "px";
+    item.appendChild(c);
+    const lbl = document.createElement("label");
+    lbl.textContent = sz + "px";
+    item.appendChild(lbl);
+    row.appendChild(item);
+    extraCanvases.push({ canvas: c, size: sz });
+  }
+}
+buildSizesRow();
+
+// Build categories
+function buildCategories() {
+  const cats = document.getElementById("categories");
+  cats.innerHTML = "";
+  for (const cat of Object.keys(ALL_ANIMS)) {
+    const btn = document.createElement("button");
+    btn.className = "cat-btn" + (cat === currentCategory ? " active" : "");
+    btn.textContent = cat;
+    btn.onclick = () => { currentCategory = cat; buildCategories(); buildAnimList(); };
+    cats.appendChild(btn);
+  }
+}
+
+// Build animation list
+function buildAnimList() {
+  const list = document.getElementById("animList");
+  list.innerHTML = "";
+  const anims = ALL_ANIMS[currentCategory];
+  for (const [name, def] of Object.entries(anims)) {
+    const item = document.createElement("div");
+    item.className = "anim-item" + (name === currentAnimName ? " active" : "");
+    item.innerHTML = `<div class="name">${name}</div><div class="desc">${def.desc}</div>`;
+    item.onclick = () => selectAnim(name, def);
+    list.appendChild(item);
+  }
+}
+
+// Select animation
+function selectAnim(name, def) {
+  currentAnimName = name;
+  currentAnim = def;
+  currentParams = {};
+  for (const [k, v] of Object.entries(def.params)) currentParams[k] = v.def;
+
+  document.getElementById("animTitle").textContent = name;
+  document.getElementById("animDesc").textContent = def.desc;
+
+  // Rebuild controls
+  const controls = document.getElementById("controls");
+  controls.innerHTML = "";
+
+  // Color picker for hasColor animations
+  if (def.hasColor) {
+    const group = document.createElement("div");
+    group.className = "ctrl-group";
+    const label = document.createElement("label");
+    label.textContent = "Color";
+    const input = document.createElement("input");
+    input.type = "color";
+    input.value = currentHex;
+    input.oninput = () => { currentHex = input.value; currentColor = hexToRgb(input.value); };
+    group.appendChild(label);
+    group.appendChild(input);
+    controls.appendChild(group);
+  }
+
+  for (const [pName, pDef] of Object.entries(def.params)) {
+    const group = document.createElement("div");
+    group.className = "ctrl-group";
+    const label = document.createElement("label");
+    label.textContent = pName;
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.min = pDef.min;
+    slider.max = pDef.max;
+    slider.step = pDef.step;
+    slider.value = pDef.def;
+    const val = document.createElement("span");
+    val.className = "val";
+    val.textContent = pDef.def;
+    slider.oninput = () => { currentParams[pName] = +slider.value; val.textContent = slider.value; };
+    group.appendChild(label);
+    group.appendChild(slider);
+    group.appendChild(val);
+    controls.appendChild(group);
+  }
+
+  // Update sidebar highlight
+  buildAnimList();
+
+  // Auto-play
+  if (!playing) togglePlay();
+
+  // Draw initial frame
+  renderFrame(0);
+}
+
+function setGridSize(n) {
+  GRID = n;
+  CENTER = (GRID - 1) / 2;
+  document.getElementById("gridVal").textContent = n + "x" + n;
+  // Resize main canvas
+  const mainSize = 280;
+  mainCanvas.width = mainSize * DPR;
+  mainCanvas.height = mainSize * DPR;
+  mainCanvas.style.width = mainSize + "px";
+  mainCanvas.style.height = mainSize + "px";
+  // Re-render current frame
+  if (currentAnim) renderFrame(elapsed);
+}
+
+function copyCode() {
+  if (!currentAnim) return;
+  const lines = [];
+  lines.push(`// Animation: ${currentAnimName}`);
+  lines.push(`// Category: ${currentCategory}`);
+  lines.push(`const GRID = ${GRID};`);
+  lines.push(`const CENTER = (GRID - 1) / 2;`);
+  if (currentAnim.hasColor) {
+    lines.push(`const color = { r: ${currentColor.r}, g: ${currentColor.g}, b: ${currentColor.b} }; // ${currentHex}`);
+  }
+  lines.push(`const params = {`);
+  for (const [k, v] of Object.entries(currentParams)) {
+    lines.push(`  ${k}: ${v},`);
+  }
+  lines.push(`};`);
+  const snippet = lines.join("\n");
+  navigator.clipboard.writeText(snippet).then(() => {
+    const btn = document.getElementById("copyBtn");
+    btn.textContent = "Copied!";
+    btn.classList.add("copied");
+    setTimeout(() => { btn.textContent = "Copy Code"; btn.classList.remove("copied"); }, 1500);
+  });
+  // Also show in code output area
+  const out = document.getElementById("codeOutput");
+  out.style.display = "block";
+  out.textContent = snippet;
+}
+
+function togglePlay() {
+  playing = !playing;
+  const btn = document.getElementById("playBtn");
+  btn.textContent = playing ? "\u25A0 Stop" : "\u25B6 Play";
+  btn.classList.toggle("playing", playing);
+}
+
+function renderFrame(t) {
+  if (!currentAnim) return;
+  const cells = currentAnim.hasColor
+    ? currentAnim.fn(t, currentParams, currentColor)
+    : currentAnim.fn(t, currentParams);
+
+  drawLED(mainCtx, mainCanvas.width, cells);
+  for (const { canvas, size } of extraCanvases) {
+    drawLED(canvas.getContext("2d"), size * DPR, cells);
+  }
+}
+
+// Animation loop
+function animate(time) {
+  if (!lastTime) lastTime = time;
+  const dt = Math.min(time - lastTime, 50) / 1000;
+  lastTime = time;
+  if (playing) {
+    elapsed += dt;
+    renderFrame(elapsed);
+  }
+  requestAnimationFrame(animate);
+}
+
+// Init
+buildCategories();
+buildAnimList();
+
+// Auto-select first animation
+const firstCat = Object.keys(ALL_ANIMS)[0];
+const firstAnims = ALL_ANIMS[firstCat];
+const firstName = Object.keys(firstAnims)[0];
+selectAnim(firstName, firstAnims[firstName]);
+
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
